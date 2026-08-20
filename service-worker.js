@@ -1,9 +1,15 @@
 // Service worker Ruang Edit — bikin tool ini bisa dibuka OFFLINE setelah pertama kali diakses.
-// Strategi "cache-first": file utama disimpan di cache pas pertama kali dibuka, lalu dipakai terus
-// dari cache setiap kali dibuka lagi (tidak perlu internet) kecuali ada versi baru yang di-deploy.
-const CACHE_NAME = 'ruang-edit-cache-v1';
-const FILES_TO_CACHE = [
-  './ruang-edit.html',
+//
+// Strategi:
+// - HTML utama (ruang-edit.html) pakai "network-first": tiap dibuka, coba ambil versi TERBARU dari
+//   server dulu. Kalau berhasil, langsung dipakai (dan cache-nya ikut diupdate). Kalau gagal (lagi
+//   offline), baru jatuh ke versi cache biar tool tetap bisa dibuka tanpa internet. Ini yang bikin
+//   update kode langsung kepake begitu dibuka lagi — gak perlu buka-tutup-buka berkali-kali.
+// - File statis (ikon, manifest) tetap "cache-first" seperti sebelumnya, karena jarang berubah dan
+//   lebih hemat kuota/lebih cepat dimuat dari cache.
+const CACHE_NAME = 'ruang-edit-cache-v2';
+const APP_SHELL = './ruang-edit.html';
+const STATIC_FILES = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -12,7 +18,7 @@ const FILES_TO_CACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(FILES_TO_CACHE))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll([APP_SHELL, ...STATIC_FILES]))
   );
   self.skipWaiting();
 });
@@ -31,12 +37,26 @@ self.addEventListener('fetch', (event) => {
   // FFmpeg/model AI) lewat apa adanya, karena itu memang butuh internet pas dipakai.
   if(event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+  const isAppShell = event.request.mode === 'navigate' || url.pathname.endsWith('/ruang-edit.html');
+
+  if(isAppShell){
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        if(response && response.status === 200){
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(APP_SHELL, clone));
+        }
+        return response;
+      }).catch(() => caches.match(APP_SHELL))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if(cached) return cached;
       return fetch(event.request).then((response) => {
-        // Simpan salinan baru ke cache biar makin lengkap offline-nya, tapi jangan sampai gagal total
-        // kalau responsenya bukan tipe yang bisa di-cache (misal cross-origin opaque response).
         if(response && response.status === 200 && response.type === 'basic'){
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));

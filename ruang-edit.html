@@ -2982,6 +2982,14 @@ if('serviceWorker' in navigator){
       console.log('Service worker tidak terdaftar (wajar kalau dibuka dari file lokal, bukan https://):', err);
     });
   });
+  // Kalau ada versi service worker baru yang baru aktif mengambil alih, muat ulang halaman sekali
+  // biar konten yang tampil pasti versi terbaru (bukan versi yang kadung ke-load sebelum SW baru siap).
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(swRefreshing) return;
+    swRefreshing = true;
+    window.location.reload();
+  });
 }
 </script>
 </body>
