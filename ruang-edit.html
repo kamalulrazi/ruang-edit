@@ -242,9 +242,10 @@
   .film-block{
     position:relative; min-width:110px; height:64px; border-radius:6px; overflow:hidden;
     border:2px solid var(--border); cursor:pointer; background:var(--panel-2); flex-shrink:0;
+    touch-action:pan-x; /* biar swipe lihat2 klip di filmstrip tetap scroll mulus, bukan ke-drag */
   }
   .film-block.active{ border-color: var(--amber); }
-  .film-block.dragging{ opacity:0.35; pointer-events:none; }
+  .film-block.dragging{ opacity:0.35; pointer-events:none; touch-action:none; }
   .film-strip{ position:absolute; inset:0; display:flex; }
   .film-strip img{ flex:1; height:100%; object-fit:cover; display:block; pointer-events:none; user-select:none; }
   .film-strip .ph{ flex:1; height:100%; background: linear-gradient(90deg,var(--panel-2),var(--border)); }
@@ -1401,24 +1402,52 @@
       block.dataset.idx = idx;
       block.addEventListener('pointerdown', (e) => {
         const downX = e.clientX, downY = e.clientY;
-        let didDrag = false;
+        const isTouchLike = e.pointerType === 'touch' || e.pointerType === 'pen';
+        const LONG_PRESS_MS = 380;   // lama tahan sebelum klip "diangkat" utk mode pindah urutan
+        const MOVE_CANCEL_PX = 10;   // gerak sejauh ini sebelum long-press selesai = dianggap swipe biasa (lihat2 klip)
+        const DRAG_START_PX = 6;     // ambang gerak buat mouse (klik-tarik langsung, tanpa nunggu)
+
+        let didDrag = false;     // sudah masuk mode pindah urutan
+        let cancelled = false;   // ternyata cuma swipe/scroll biasa
+
+        function enterDragMode(){
+          didDrag = true;
+          pushUndo();
+          draggedClipId = clip.id;
+          if(navigator.vibrate) navigator.vibrate(15); // getar halus sbg tanda klip sudah "diangkat"
+          renderClipList();
+        }
+
+        const longPressTimer = isTouchLike ? setTimeout(() => {
+          if(cancelled) return;
+          enterDragMode();
+        }, LONG_PRESS_MS) : null;
 
         function onMove(ev){
-          if(!didDrag && Math.hypot(ev.clientX - downX, ev.clientY - downY) > 6){
-            didDrag = true;
-            pushUndo();
-            draggedClipId = clip.id;
-            renderClipList();
+          if(didDrag){
+            updateLiveReorder(ev.clientX);
+            return;
           }
-          if(didDrag) updateLiveReorder(ev.clientX);
+          const dist = Math.hypot(ev.clientX - downX, ev.clientY - downY);
+          if(isTouchLike){
+            // Sebelum long-press kelar: gerakan dianggap swipe buat lihat2 klip lain, bukan drag.
+            // Jangan preventDefault di sini supaya scroll horizontal filmstrip tetap jalan normal.
+            if(dist > MOVE_CANCEL_PX){
+              cancelled = true;
+              clearTimeout(longPressTimer);
+            }
+          } else if(dist > DRAG_START_PX){
+            enterDragMode();
+          }
         }
         function onUp(){
+          if(longPressTimer) clearTimeout(longPressTimer);
           document.removeEventListener('pointermove', onMove);
           document.removeEventListener('pointerup', onUp);
           if(didDrag){
             draggedClipId = null;
             renderClipList();
-          } else {
+          } else if(!cancelled){
             setActiveClip(clip.id);
           }
         }
