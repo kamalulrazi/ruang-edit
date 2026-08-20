@@ -2505,6 +2505,20 @@
     }
   }
 
+  function pickVideoBitrate(dims){
+    // Sebelumnya bitrate dipukul rata (4 Mbps di HP, 8 Mbps di desktop) TANPA peduli resolusi yang
+    // dipilih (480p/720p/1080p) — akibatnya ekspor 1080p di HP jadi jauh kekurangan bit, kelihatan paling
+    // parah pas adegan gerak cepat (patah-patah/pecah, mirip video yang dikompres kelewat agresif),
+    // karena gerakan cepat butuh lebih banyak bit per frame buat merekam perubahan gambarnya dibanding
+    // adegan diam. Angka di bawah ini tiap tingkat resolusi disesuaikan sendiri-sendiri (mirip pedoman
+    // bitrate resmi YouTube buat SDR 24–30fps), sedikit lebih hemat di HP karena encoder software di HP
+    // kadang kewalahan kalau dipaksa setinggi di desktop/laptop.
+    const shortSide = Math.min(dims.w, dims.h);
+    if(shortSide >= 1000) return isMobileDevice ? 8_000_000 : 12_000_000; // ~1080p
+    if(shortSide >= 640)  return isMobileDevice ? 4_500_000 : 6_000_000;  // ~720p / 540p
+    return isMobileDevice ? 2_500_000 : 3_000_000;                        // ~480p ke bawah
+  }
+
   function exportClipsToBlob(clipArray, progressCallback){
     return new Promise((resolve, reject) => {
       const dims = getCanvasDims(clipArray[0]);
@@ -2871,7 +2885,7 @@
           }
 
           try{
-            recorder = new MediaRecorder(mixedStream, { mimeType, videoBitsPerSecond: isMobileDevice ? 4_000_000 : 8_000_000 });
+            recorder = new MediaRecorder(mixedStream, { mimeType, videoBitsPerSecond: pickVideoBitrate(dims) });
           }catch(err){
             recorder = new MediaRecorder(mixedStream, { mimeType });
           }
