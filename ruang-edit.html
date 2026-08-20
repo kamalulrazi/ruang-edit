@@ -2681,6 +2681,7 @@
 
       let failCount = 0;
       let lastError = null;
+      const clipFailedNames = [];
       let recorder;
       const recordedChunks = [];
       let cleanedUp = false;
@@ -2734,26 +2735,45 @@
             let finalBlob = new Blob(recordedChunks, { type: isWebm ? 'video/webm' : 'video/mp4' });
             finalBlob.exportExt = outputExt;
             finalBlob.exportDuration = elapsedBefore || totalDur; // durasi klip yang BENERAN berhasil direkam
+            finalBlob.failedClipsCount = failCount;
+            finalBlob.failedClipNames = clipFailedNames;
             resolve(finalBlob);
           };
 
           recorder.start(); // TIDAK pakai timeslice — data ditulis sekali di akhir, struktur file lebih utuh.
           let audioStarted = false;
           for(const clip of clipArray){
-            try{
-              await playClip(clip, () => {
-                // Audio (satu buffer utuh buat semua klip) dimulai TEPAT SEKALI, persis saat frame video
-                // PERTAMA di seluruh proses ekspor beneran mulai terdorong — bukan tiap ganti klip.
-                if(!audioStarted && audioBufferSourceNode){
-                  audioStarted = true;
-                  audioBufferSourceNode.start();
+            let ok = false;
+            for(let attempt = 1; attempt <= 2 && !ok; attempt++){
+              try{
+                await playClip(clip, () => {
+                  // Audio (satu buffer utuh buat semua klip) dimulai TEPAT SEKALI, persis saat frame video
+                  // PERTAMA di seluruh proses ekspor beneran mulai terdorong — bukan tiap ganti klip.
+                  if(!audioStarted && audioBufferSourceNode){
+                    audioStarted = true;
+                    audioBufferSourceNode.start();
+                  }
+                });
+                ok = true;
+              }
+              catch(err){
+                console.error(`Gagal memproses klip ${clip.name} (percobaan ${attempt}):`, err);
+                if(attempt < 2){
+                  // Sebelum coba lagi: reset total elemen video-nya. Beberapa HP macet decodernya kalau
+                  // 1 elemen <video> yang sama dipakai gonta-ganti src puluhan kali berturut-turut dalam
+                  // 1 sesi ekspor panjang (misal ekspor banyak video sekaligus) — reset ini sering
+                  // menyelamatkan klip yang tadinya bakal gagal & bikin video hasil jadi "beku" (gambar
+                  // diam tapi audio tetap jalan, karena audionya direkam terpisah dari gambar).
+                  try{ exportVideo.pause(); }catch(_e){}
+                  exportVideo.removeAttribute('src');
+                  exportVideo.load();
+                  await new Promise(r => setTimeout(r, 200));
+                } else {
+                  failCount++;
+                  lastError = err;
+                  clipFailedNames.push(clip.name);
                 }
-              });
-            }
-            catch(err){
-              console.error('Gagal memproses klip', clip.name, err);
-              failCount++;
-              lastError = err;
+              }
             }
           }
           recorder.stop();
@@ -2884,7 +2904,11 @@
         exportInfo.textContent = 'Memproses video gabungan...';
         const blob = await exportClipsToBlob(groups[0], pct => { progressBar.style.width = pct + '%'; });
         exportInfo.textContent = 'Menyempurnakan file (langkah cepat)...';
-        await finalizeAndDownload(blob, 'hasil-edit', 'Unduh hasil');
+        let label = 'Unduh hasil';
+        if(blob.failedClipsCount > 0){
+          label += ` — ⚠️ ${blob.failedClipsCount} klip gagal direkam (bagian video itu bisa macet/beku, audio tetap jalan). Coba ekspor ulang.`;
+        }
+        await finalizeAndDownload(blob, 'hasil-edit', label);
         exportInfo.textContent = 'Selesai — video gabungan siap diunduh.';
       } else {
         for(let gi = 0; gi < groups.length; gi++){
@@ -2893,7 +2917,14 @@
           const blob = await exportClipsToBlob(groupClips, pct => {
             progressBar.style.width = (((gi + pct/100) / groups.length) * 100) + '%';
           });
-          await finalizeAndDownload(blob, `video-${gi+1}`, `Unduh Video ${gi+1} (${groupClips.length} klip)`);
+          let label = `Unduh Video ${gi+1} (${groupClips.length} klip)`;
+          if(blob.failedClipsCount > 0){
+            label += ` — ⚠️ ${blob.failedClipsCount} klip gagal direkam (bagian video itu bisa macet/beku, audio tetap jalan). Coba ekspor ulang video ini.`;
+          }
+          await finalizeAndDownload(blob, `video-${gi+1}`, label);
+          // Jeda singkat antar video — penting kalau ekspor banyak video sekaligus (misal puluhan) dalam
+          // 1 sesi, biar browser (terutama di HP) sempat bebasin resource decoder video sebelum lanjut.
+          if(gi < groups.length - 1) await new Promise(r => setTimeout(r, 400));
         }
         exportInfo.textContent = `Selesai — ${groups.length} video terpisah siap diunduh di bawah.`;
       }
