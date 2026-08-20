@@ -50,6 +50,11 @@
     flex: 0 0 auto; display:flex; align-items:center; gap:8px;
     padding: 10px 12px; border-bottom:1px solid var(--border); background: var(--bg);
   }
+  .topbar-scroll{
+    display:flex; align-items:center; gap:8px; overflow-x:auto; overflow-y:hidden;
+    scrollbar-width:none; flex:1 1 auto; min-width:0;
+  }
+  .topbar-scroll::-webkit-scrollbar{ display:none; }
   .icon-btn{
     width:34px; height:34px; border-radius:9px; background: var(--panel); border:1px solid var(--border);
     color: var(--text); font-size:15px; display:flex; align-items:center; justify-content:center;
@@ -64,7 +69,7 @@
   .dropdown-btn:hover{ border-color: var(--amber); }
   .export-btn-top{
     background: var(--amber); color:#1A1305; border:none; padding:9px 18px; border-radius:999px;
-    font-family:'Inter',sans-serif; font-weight:700; font-size:13px; cursor:pointer; margin-left:auto;
+    font-family:'Inter',sans-serif; font-weight:700; font-size:13px; cursor:pointer;
     flex-shrink:0;
   }
   .export-btn-top:hover{ filter:brightness(1.08); }
@@ -444,11 +449,13 @@
 
   <div class="topbar">
     <button type="button" class="icon-btn hidden" id="homeBtn" title="Kembali ke Beranda">←</button>
-    <div class="status ready" id="statusPill"><span class="dot"></span><span id="statusText">SIAP</span></div>
-    <div class="autosave-indicator" id="autosaveIndicator"><span class="dot2"></span><span id="autosaveText">Belum ada perubahan</span></div>
-    <button type="button" class="dropdown-btn" id="ratioDropdownBtn" title="Rasio &amp; kualitas ekspor">
-      <span id="ratioDropdownLabel">Asli · 720p</span> ▾
-    </button>
+    <div class="topbar-scroll">
+      <div class="status ready" id="statusPill"><span class="dot"></span><span id="statusText">SIAP</span></div>
+      <div class="autosave-indicator" id="autosaveIndicator"><span class="dot2"></span><span id="autosaveText">Belum ada perubahan</span></div>
+      <button type="button" class="dropdown-btn" id="ratioDropdownBtn" title="Rasio &amp; kualitas ekspor">
+        <span id="ratioDropdownLabel">Asli · 720p</span> ▾
+      </button>
+    </div>
     <button type="button" class="export-btn-top" id="exportBtn">Ekspor</button>
   </div>
 
