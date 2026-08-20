@@ -1415,6 +1415,12 @@
         let didDrag = false;     // sudah masuk mode pindah urutan
         let cancelled = false;   // ternyata cuma swipe/scroll biasa
 
+        // Kunci sentuhan ini ke elemen container (yg gak pernah dihapus dari DOM), bukan ke kotak klip
+        // itu sendiri. Soalnya tiap kali renderClipList() jalan (mis. buat mengecilkan kotak lain),
+        // kotak klip yg lagi disentuh ikut dibuat ulang dari nol — kalau capture-nya nempel di kotak
+        // itu, browser (terutama di HP) langsung anggap sentuhannya "batal" pas elemen lama hilang.
+        try{ clipListEl.setPointerCapture(e.pointerId); }catch(err){}
+
         function enterDragMode(){
           didDrag = true;
           pushUndo();
@@ -1450,6 +1456,7 @@
           document.removeEventListener('pointermove', onMove);
           document.removeEventListener('pointerup', onUp);
           document.removeEventListener('pointercancel', onCancel);
+          try{ clipListEl.releasePointerCapture(e.pointerId); }catch(err){}
           if(didDrag){
             draggedClipId = null;
             renderClipList();
