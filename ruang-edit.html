@@ -2912,7 +2912,14 @@
     // Langkah 3 (cadangan terakhir, opsional): remux via FFmpeg buat rapikan struktur file lebih jauh.
     // Kalau langkah 1 & 2 sudah berhasil, ini dilewati saja — FFmpeg butuh internet & worker yang kadang
     // diblokir tergantung cara file ini dibuka, jadi baru dicoba kalau benar-benar dibutuhkan.
-    if(!fixedOk){
+    // PENTING: cuma masuk akal untuk hasil MP4. Untuk WebM ini SELALU gagal (ffmpeg dipanggil dengan
+    // "-c copy", yaitu pindah container TANPA transcode ulang — video VP8/VP9 & audio Opus milik WebM
+    // memang tidak bisa dimasukkan ke MP4 dengan cara "copy" begitu saja). Sebelum ada penjagaan
+    // `ext === 'mp4'` ini, tiap ekspor WebM selalu memaksa download FFmpeg (puluhan MB) dari CDN, gagal,
+    // lalu MEMBUANG cache FFmpeg-nya juga — sehingga ekspor WebM berikutnya download ulang dari nol lagi.
+    // Itulah sumber utama unduhan terasa lambat di HP yang merekam WebM (belum dukung rekam MP4 langsung).
+    // WebM dari MediaRecorder sendiri sudah bisa di-seek normal, jadi memang tidak perlu langkah ini sama sekali.
+    if(!fixedOk && ext === 'mp4'){
       const timeoutMs = 40000;
       for(let attempt = 1; attempt <= 2 && !fixedOk; attempt++){
         try{
@@ -2929,9 +2936,12 @@
       }
     }
 
-    if(!fixedOk){
+    // Peringatan soal metadata durasi/seek cuma relevan buat MP4 (itu yang punya masalah struktur
+    // "fragmented" tadi) — WebM dari MediaRecorder memang sudah normal, jadi tidak perlu diberi
+    // peringatan yang membingungkan seolah-olah ada yang kurang beres.
+    if(ext === 'mp4' && !fixedOk){
       label += ' — ⚠️ metadata durasi mungkin tidak akurat, tapi videonya utuh';
-    } else if(!seekFixed){
+    } else if(ext === 'mp4' && fixedOk && !seekFixed){
       label += ' — ⚠️ menggeser posisi putar mungkin kurang akurat di sebagian aplikasi';
     }
     addDownloadLink(finalBlob, `${baseName}.${finalExt}`, label);
