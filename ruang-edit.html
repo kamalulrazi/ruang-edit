@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Ruang Edit — Editor Video</title>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#0F1013">
@@ -29,7 +29,8 @@
     --radius: 10px;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
+  html,body{margin:0;padding:0; touch-action:manipulation; -webkit-user-select:none; user-select:none;}
+  input, textarea, select{ -webkit-user-select:text; user-select:text; }
   body{
     background: var(--bg);
     color: var(--text);
