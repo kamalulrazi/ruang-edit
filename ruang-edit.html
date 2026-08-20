@@ -2984,10 +2984,22 @@ document.addEventListener('touchmove', function(e){
 document.addEventListener('gesturestart', function(e){ e.preventDefault(); }, { passive: false });
 
 if('serviceWorker' in navigator){
+  let swRegistration = null;
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js').catch(err => {
+    navigator.serviceWorker.register('./service-worker.js').then(reg => {
+      swRegistration = reg;
+    }).catch(err => {
       console.log('Service worker tidak terdaftar (wajar kalau dibuka dari file lokal, bukan https://):', err);
     });
+  });
+  // Kalau app di-install jadi ikon di HP (WebAPK), Android sering "meresume" app dari background alih-alih
+  // benar-benar membukanya dari nol — jadi event 'load' di atas tidak selalu terpicu ulang. Makanya, tiap
+  // kali app ini kembali ke foreground (dibuka lagi dari recent apps/ikon), kita paksa cek ke server apa
+  // ada versi baru — supaya update tidak cuma kedeteksi kalau sempat mampir dulu ke Chrome biasa.
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'visible' && swRegistration){
+      swRegistration.update().catch(() => {});
+    }
   });
   // Kalau ada versi service worker baru yang baru aktif mengambil alih, muat ulang halaman sekali
   // biar konten yang tampil pasti versi terbaru (bukan versi yang kadung ke-load sebelum SW baru siap).
