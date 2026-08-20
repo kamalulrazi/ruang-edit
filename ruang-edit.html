@@ -243,9 +243,12 @@
     position:relative; min-width:110px; height:64px; border-radius:6px; overflow:hidden;
     border:2px solid var(--border); cursor:pointer; background:var(--panel-2); flex-shrink:0;
     touch-action:pan-x; /* biar swipe lihat2 klip di filmstrip tetap scroll mulus, bukan ke-drag */
+    transition: height 0.16s ease, opacity 0.16s ease;
   }
   .film-block.active{ border-color: var(--amber); }
   .film-block.dragging{ opacity:0.35; pointer-events:none; touch-action:none; }
+  .film-timeline.reordering .film-block{ height:46px; } /* semua kotak mengecil selagi mode pindah urutan aktif */
+  .film-timeline.reordering .film-block.dragging{ height:64px; opacity:0.55; } /* klip yg lagi digenggam tetap ukuran normal biar gampang dilihat */
   .film-strip{ position:absolute; inset:0; display:flex; }
   .film-strip img{ flex:1; height:100%; object-fit:cover; display:block; pointer-events:none; user-select:none; }
   .film-strip .ph{ flex:1; height:100%; background: linear-gradient(90deg,var(--panel-2),var(--border)); }
@@ -1188,6 +1191,7 @@
     if(newIdx !== draggedFromIdx){
       const [moved] = clips.splice(draggedFromIdx, 1);
       clips.splice(newIdx, 0, moved);
+      if(navigator.vibrate) navigator.vibrate(8); // getar pelan tiap klip tertukar posisi
       renderClipList();
     }
   }
@@ -1328,6 +1332,7 @@
       firstRects[b.dataset.clipId] = b.getBoundingClientRect();
     });
 
+    clipListEl.classList.toggle('reordering', !!draggedClipId);
     clipListEl.innerHTML = '';
     let groupNum = 1;
     clips.forEach((clip, idx) => {
@@ -1440,19 +1445,22 @@
             enterDragMode();
           }
         }
-        function onUp(){
+        function onUp(ev, isCancel){
           if(longPressTimer) clearTimeout(longPressTimer);
           document.removeEventListener('pointermove', onMove);
           document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onCancel);
           if(didDrag){
             draggedClipId = null;
             renderClipList();
-          } else if(!cancelled){
+          } else if(!cancelled && !isCancel){
             setActiveClip(clip.id);
           }
         }
+        function onCancel(ev){ onUp(ev, true); }
         document.addEventListener('pointermove', onMove);
         document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onCancel);
       });
 
       function startDrag(side, e){
