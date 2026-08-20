@@ -1172,7 +1172,23 @@
   });
   addClipBtn.addEventListener('click', () => fileInput.click());
 
+  // pointermove bisa tembak puluhan kali per detik di HP — kalau tiap event langsung baca ulang
+  // posisi/layout semua kotak klip (getBoundingClientRect), browser jadi kerja jauh lebih sering
+  // dari yang sanggup digambar ke layar (~60x/detik), dan itu yang bikin geser klip kelihatan
+  // patah-patah. Solusinya: tampung posisi jari terbaru, tapi hitung ulang & tukar posisi klip
+  // MAKSIMAL 1x per animation frame lewat requestAnimationFrame.
+  let reorderRAF = null;
+  let pendingReorderX = null;
   function updateLiveReorder(clientX){
+    pendingReorderX = clientX;
+    if(reorderRAF !== null) return; // sudah ada 1 frame yang dijadwalkan, tinggal update targetnya di atas
+    reorderRAF = requestAnimationFrame(() => {
+      reorderRAF = null;
+      applyLiveReorder(pendingReorderX);
+    });
+  }
+
+  function applyLiveReorder(clientX){
     const blocks = Array.from(clipListEl.querySelectorAll('.film-block')).filter(b => b.dataset.clipId !== draggedClipId);
     const draggedFromIdx = clips.findIndex(c => c.id === draggedClipId);
     if(draggedFromIdx === -1) return;
@@ -1457,6 +1473,7 @@
           document.removeEventListener('pointerup', onUp);
           document.removeEventListener('pointercancel', onCancel);
           try{ clipListEl.releasePointerCapture(e.pointerId); }catch(err){}
+          if(reorderRAF !== null){ cancelAnimationFrame(reorderRAF); reorderRAF = null; }
           if(didDrag){
             draggedClipId = null;
             renderClipList();
