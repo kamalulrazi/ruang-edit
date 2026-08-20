@@ -1,0 +1,16 @@
+{
+  "name": "Ruang Edit",
+  "short_name": "Ruang Edit",
+  "description": "Editor video ringkas berbasis browser — potong, gabung, kasih subtitel, langsung dari HP.",
+  "start_url": "./ruang-edit.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F1013",
+  "theme_color": "#0F1013",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
