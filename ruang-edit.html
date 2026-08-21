@@ -2563,7 +2563,10 @@
       exportVideo.style.zIndex = '-1';
       exportVideo.style.pointerEvents = 'none';
       exportVideo.playsInline = true;
-      exportVideo.muted = false; // tidak dibisukan — supaya Web Audio API bisa menangkap audio asli
+      exportVideo.muted = true; // audio TIDAK diambil dari elemen video ini — direkam terpisah lewat buffer
+                                 // audio sendiri di bawah (lihat buildConcatenatedAudioBuffer), jadi
+                                 // exportVideo dibisukan total dari awal. Sekalian menghindari masalah
+                                 // kebijakan autoplay-dengan-suara di sejumlah browser/HP.
       document.body.appendChild(exportVideo);
 
       const mixedStream = canvasStream;
@@ -2855,11 +2858,6 @@
 
       (async () => {
         try{
-          await loadExportClip(clipArray[0]);
-          exportVideo.muted = true; // audio sudah sepenuhnya ditangani lewat buffer terpisah di bawah,
-                                     // jadi exportVideo dibisukan total — sekalian menghindari masalah
-                                     // kebijakan autoplay-dengan-suara di sejumlah browser/HP.
-
           let audioBufferSourceNode = null;
           try{
             const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
@@ -2927,15 +2925,26 @@
             console.error('MediaRecorder mengalami error:', (ev && ev.error) ? ev.error : ev);
           };
 
-          recorder.start(); // TIDAK pakai timeslice — data ditulis sekali di akhir, struktur file lebih utuh.
+          // PENTING: recorder.start() SENGAJA ditunda sampai frame video PERTAMA yang sungguhan siap
+          // (lihat callback onFirstFrame di bawah, sinkron dengan audio) — bukan dipanggil di sini,
+          // sebelum klip pertama selesai dimuat & digeser ke titik potongnya. Kalau direkam dari sini,
+          // encoder mulai aktif selagi canvas masih kosong/kondisi lama selama proses loading klip
+          // pertama berlangsung, lalu "melompat" begitu konten asli baru masuk — itu yang kelihatan
+          // sebagai patah-patah kecil di detik-detik awal video hasil ekspor.
+          let recorderStarted = false;
           let audioStarted = false;
           for(const clip of clipArray){
             let ok = false;
             for(let attempt = 1; attempt <= 2 && !ok; attempt++){
               try{
                 await playClip(clip, () => {
-                  // Audio (satu buffer utuh buat semua klip) dimulai TEPAT SEKALI, persis saat frame video
-                  // PERTAMA di seluruh proses ekspor beneran mulai terdorong — bukan tiap ganti klip.
+                  // Titik ini adalah saat frame video PERTAMA di seluruh proses ekspor beneran mulai
+                  // terdorong (bukan tiap ganti klip) — recorder & audio sama-sama mulai TEPAT di sini,
+                  // sekali saja, biar keduanya sinkron dan tidak ada jeda kosong di awal rekaman.
+                  if(!recorderStarted){
+                    recorderStarted = true;
+                    recorder.start(); // TIDAK pakai timeslice — data ditulis sekali di akhir, struktur file lebih utuh.
+                  }
                   if(!audioStarted && audioBufferSourceNode){
                     audioStarted = true;
                     audioBufferSourceNode.start();
@@ -2963,17 +2972,24 @@
               }
             }
           }
-          recorder.stop();
-          // Jaga-jaga terakhir: kalau event 'onstop' entah kenapa tidak pernah menyala (jarang, tapi
-          // pernah dilaporkan terjadi di sejumlah browser/HP saat resource lagi ketat), tanpa ini proses
-          // akan macet selamanya padahal rekamannya sendiri sudah selesai. Setelah 8 detik nunggu tanpa
-          // 'onstop', paksa selesaikan pakai data yang sudah sempat terekam sejauh itu.
-          setTimeout(() => {
-            if(!recordingFinalized){
-              console.warn('MediaRecorder tidak kunjung memicu onstop dalam 8 detik, dipaksa selesai dengan data yang sudah terekam.');
-              finalizeRecording();
-            }
-          }, 8000);
+          if(recorderStarted){
+            recorder.stop();
+            // Jaga-jaga terakhir: kalau event 'onstop' entah kenapa tidak pernah menyala (jarang, tapi
+            // pernah dilaporkan terjadi di sejumlah browser/HP saat resource lagi ketat), tanpa ini proses
+            // akan macet selamanya padahal rekamannya sendiri sudah selesai. Setelah 8 detik nunggu tanpa
+            // 'onstop', paksa selesaikan pakai data yang sudah sempat terekam sejauh itu.
+            setTimeout(() => {
+              if(!recordingFinalized){
+                console.warn('MediaRecorder tidak kunjung memicu onstop dalam 8 detik, dipaksa selesai dengan data yang sudah terekam.');
+                finalizeRecording();
+              }
+            }, 8000);
+          } else {
+            // Semua klip gagal sebelum sempat merekam satu frame pun — recorder.stop() TIDAK boleh dipanggil
+            // ke recorder yang belum pernah di-start (bakal langsung error). finalizeRecording() sendiri
+            // sudah menangani kondisi "tidak ada data terekam" dengan pesan yang jelas ke pengguna.
+            finalizeRecording();
+          }
         }catch(err){
           // Kalau gagal SEBELUM recorder sempat dibuat (misal klip pertama gagal dimuat), elemen video/canvas
           // tersembunyi yang sudah ditambahkan ke halaman tadi harus tetap dibuang di sini juga — supaya tidak
