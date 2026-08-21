@@ -247,6 +247,11 @@
     jauh lebih cepat dari 380ms yang kita kasih buat "tahan", jadi getaran tangan wajar pas nahan klip
     keburu dianggap swipe & long-press kita batal duluan. Swipe buat lihat-lihat klip sekarang ditangani
     manual lewat kode (lihat onMove di bawah), bukan diserahkan ke browser. */
+    -webkit-touch-callout:none; /* di iOS Safari, long-press di atas <img> otomatis memunculkan menu
+    "Simpan Gambar/Salin/Bagikan" bawaan — waktu munculnya nyaris bareng sama 380ms long-press kita buat
+    pindah urutan, jadi saling ganggu kalau tidak dimatikan */
+    -webkit-user-drag:none; /* lapisan pengaman kedua di luar draggable=false yang sudah diset di JS
+    buat thumbnail-nya — beberapa WebKit lama kadang tidak konsisten baca atribut draggable */
     transition: height 0.16s ease, opacity 0.16s ease;
   }
   .film-block.active{ border-color: var(--amber); }
@@ -1390,6 +1395,10 @@
           if(!src) return;
           const img = document.createElement('img');
           img.src = src;
+          img.draggable = false; // browser otomatis bikin <img> bisa di-drag native (efek "ghost" gambar
+          // ngikutin kursor) — kalau tidak dimatikan, klik-tahan-geser pas kursor pas di atas thumbnail
+          // (bukan di sela-sela kotaknya) bisa keburu dianggap drag-gambar oleh browser, bukan masuk ke
+          // mode pindah urutan kita. Trim-handle di bawah sudah dijaga soal ini, thumbnail-nya kelewat.
           strip.appendChild(img);
         });
       } else {
@@ -1442,6 +1451,11 @@
 
       // --- Klik singkat = pilih klip, tarik = pindah urutan (pointer-event custom, bukan drag native browser) ---
       block.dataset.idx = idx;
+      block.addEventListener('contextmenu', (e) => e.preventDefault());
+      // ^ lapisan pengaman terakhir: sejumlah Android/WebView kadang TETAP memunculkan menu konteks
+      // (mirip "Simpan Gambar") pas long-press, meski user-select & touch-callout sudah dimatikan —
+      // menu itu kalau sampai muncul akan langsung membatalkan gesture pindah urutan kita di tengah jalan.
+
       block.addEventListener('pointerdown', (e) => {
         const downX = e.clientX, downY = e.clientY;
         const isTouchLike = e.pointerType === 'touch' || e.pointerType === 'pen';
