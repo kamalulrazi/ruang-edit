@@ -242,7 +242,11 @@
   .film-block{
     position:relative; min-width:110px; height:64px; border-radius:6px; overflow:hidden;
     border:2px solid var(--border); cursor:pointer; background:var(--panel-2); flex-shrink:0;
-    touch-action:pan-x; /* biar swipe lihat2 klip di filmstrip tetap scroll mulus, bukan ke-drag */
+    touch-action:none; /* browser TIDAK boleh ikut memutuskan sendiri kapan mulai scroll — kalau
+    dibiarkan (touch-action:pan-x), browser mengambil alih gesture begitu jari bergerak dikit saja,
+    jauh lebih cepat dari 380ms yang kita kasih buat "tahan", jadi getaran tangan wajar pas nahan klip
+    keburu dianggap swipe & long-press kita batal duluan. Swipe buat lihat-lihat klip sekarang ditangani
+    manual lewat kode (lihat onMove di bawah), bukan diserahkan ke browser. */
     transition: height 0.16s ease, opacity 0.16s ease;
   }
   .film-block.active{ border-color: var(--amber); }
@@ -1467,22 +1471,32 @@
           enterDragMode();
         }, LONG_PRESS_MS) : null;
 
+        let lastX = downX; // dipakai buat hitung selisih gerak per-frame kalau ternyata ini swipe, biar bisa scroll manual
+
         function onMove(ev){
           if(didDrag){
             updateLiveReorder(ev.clientX);
+            lastX = ev.clientX;
             return;
           }
           const dist = Math.hypot(ev.clientX - downX, ev.clientY - downY);
           if(isTouchLike){
             // Sebelum long-press kelar: gerakan dianggap swipe buat lihat2 klip lain, bukan drag.
-            // Jangan preventDefault di sini supaya scroll horizontal filmstrip tetap jalan normal.
-            if(dist > MOVE_CANCEL_PX){
+            if(!cancelled && dist > MOVE_CANCEL_PX){
               cancelled = true;
               clearTimeout(longPressTimer);
+            }
+            if(cancelled){
+              // touch-action di kotak klip sudah dimatikan total (none), jadi browser TIDAK akan
+              // menggeser filmstrip-nya sendiri lagi — di sinilah scroll-nya ditangani manual, murni
+              // berdasarkan selisih posisi jari per-frame. Ini yang bikin keputusan "swipe vs tahan"
+              // sepenuhnya di tangan kode kita, bukan tebak-tebakan sama detektor gesture bawaan browser.
+              clipListEl.scrollLeft -= (ev.clientX - lastX);
             }
           } else if(dist > DRAG_START_PX){
             enterDragMode();
           }
+          lastX = ev.clientX;
         }
         function onUp(ev, isCancel){
           if(longPressTimer) clearTimeout(longPressTimer);
