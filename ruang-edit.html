@@ -255,7 +255,7 @@
     transition: height 0.16s ease, opacity 0.16s ease;
   }
   .film-block.active{ border-color: var(--amber); }
-  .film-block.dragging{ opacity:0.35; pointer-events:none; touch-action:none; }
+  .film-block.dragging{ opacity:0.55; pointer-events:none; touch-action:none; z-index:5; }
   .film-timeline.reordering .film-block{ height:46px; } /* semua kotak mengecil selagi mode pindah urutan aktif */
   .film-timeline.reordering .film-block.dragging{ height:64px; opacity:0.55; } /* klip yg lagi digenggam tetap ukuran normal biar gampang dilihat */
   .film-strip{ position:absolute; inset:0; display:flex; }
@@ -1071,6 +1071,8 @@
   let subtitles = [];    // pointer ke subtitles milik klip aktif
   let duration = 0;      // durasi klip aktif
   let draggedClipId = null;
+  let dragOffsetX = 0; // seberapa jauh (px) kotak klip yg lagi digenggam sudah digeser horizontal
+                        // dari posisi aslinya, buat bikin efek "nempel ke jari" secara real-time
 
   // --- Undo (Ctrl+Z) & Redo untuk aksi di Daftar Klip: pindah, hapus, tambah, potong, grup ---
   let undoStack = [];
@@ -1476,6 +1478,11 @@
           didDrag = true;
           pushUndo();
           draggedClipId = clip.id;
+          // Dihitung dari posisi jari SAAT INI (bukan langsung 0) — soalnya jari biasanya sudah geser
+          // sedikit sebelum 380ms "tahan" selesai (meski belum ngelewatin MOVE_CANCEL_PX), jadi kalau
+          // langsung dimulai dari 0 kotaknya bakal kelihatan "loncat" balik ke posisi awal sesaat pas
+          // mode pindah baru aktif.
+          dragOffsetX = lastX - downX;
           if(navigator.vibrate) navigator.vibrate(15); // getar halus sbg tanda klip sudah "diangkat"
           renderClipList();
         }
@@ -1489,6 +1496,17 @@
 
         function onMove(ev){
           if(didDrag){
+            // Kotak klip yang lagi digenggam ikut jari SECARA REAL-TIME di setiap gerakan (bukan cuma
+            // pas nunggu titik tukar posisi kelewatan) — dan SENGAJA cuma pakai selisih X (horizontal).
+            // Komponen Y (atas-bawah) dari gerakan jari diabaikan sepenuhnya, jadi kalau jari geser
+            // diagonal (misal ke atas sambil condong kanan), kotaknya tetap cuma ikut ke kanan, tidak
+            // ikut naik. style.transform itu operasi murah (cuma di-compositor, tidak memicu hitung
+            // ulang layout), jadi aman dipanggil di SETIAP event tanpa perlu dibatasi lewat rAF segala
+            // — beda dengan updateLiveReorder() di bawah yang baca posisi/layout kotak lain (mahal),
+            // makanya itu tetap dibatasi 1x per frame lewat rAF seperti sebelumnya.
+            dragOffsetX = ev.clientX - downX;
+            const draggedEl = clipListEl.querySelector('.film-block.dragging');
+            if(draggedEl) draggedEl.style.transform = `translateX(${dragOffsetX}px)`;
             updateLiveReorder(ev.clientX);
             lastX = ev.clientX;
             return;
@@ -1521,6 +1539,7 @@
           if(reorderRAF !== null){ cancelAnimationFrame(reorderRAF); reorderRAF = null; }
           if(didDrag){
             draggedClipId = null;
+            dragOffsetX = 0;
             renderClipList();
           } else if(!cancelled && !isCancel){
             setActiveClip(clip.id);
@@ -1581,6 +1600,15 @@
       }
     });
 
+    // Kotak klip yang lagi digenggam sengaja TIDAK dibuat ulang posisinya dari nol — begitu elemen baru
+    // selesai dibuat (misal abis ada tukar posisi di tengah drag), langsung dipasangi lagi transform
+    // sesuai posisi jari SAAT INI (dragOffsetX). Tanpa ini, kotaknya bakal kelihatan "loncat balik" ke
+    // tengah sesaat setiap kali ada tukar posisi, sebelum akhirnya ngikut jari lagi di gerakan berikutnya.
+    if(draggedClipId){
+      const draggedEl = clipListEl.querySelector('.film-block.dragging');
+      if(draggedEl) draggedEl.style.transform = `translateX(${dragOffsetX}px)`;
+    }
+
     const totalTrimmed = clips.reduce((s,c) => s + Math.max(0, c.end - c.start), 0);
     clipSummary.textContent = `${clips.length} klip · total ${fmt(totalTrimmed)}`;
 
@@ -1595,6 +1623,7 @@
 
     requestAnimationFrame(() => {
       clipListEl.querySelectorAll('.film-block').forEach(b => {
+        if(b.classList.contains('dragging')) return; // biar tidak menimpa transform 'nempel ke jari'-nya
         const first = firstRects[b.dataset.clipId];
         if(!first) return;
         const last = b.getBoundingClientRect();
