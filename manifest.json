@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "Vague Transcode",
+  "version": "0.6.12",
+  "description": "Upload videos through TikTok Studio with Vague Transcode.",
+  "action": {
+    "default_title": "Vague Transcode",
+    "default_popup": "popup.html",
+    "default_icon": "vague.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://tiktok.com/*",
+        "*://www.tiktok.com/*",
+        "*://*.tiktok.com/*"
+      ],
+      "js": [
+        "request-hook.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "*://tiktok.com/*",
+        "*://www.tiktok.com/*",
+        "*://*.tiktok.com/*"
+      ],
+      "js": [
+        "upload-hook.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "*://tiktok.com/*",
+        "*://www.tiktok.com/*",
+        "*://*.tiktok.com/*"
+      ],
+      "js": [
+        "status-badge.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "icons": {
+    "16": "vague.png",
+    "32": "vague.png",
+    "48": "vague.png",
+    "128": "vague.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "vague.png"
+      ],
+      "matches": [
+        "*://tiktok.com/*",
+        "*://www.tiktok.com/*",
+        "*://*.tiktok.com/*"
+      ]
+    }
+  ]
+}
